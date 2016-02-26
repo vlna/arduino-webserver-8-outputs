@@ -1,11 +1,21 @@
+// This is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
 #include <UIPEthernet.h>
 
-#define SERDEBUG
+#define SERDEBUG //serial port debugging
+#define RELAYS 8 //amount of controlled outputs (1..8)
+#define INVERTED //inverted outputs
 
-//TO DO: implement it for 1-8 relays
-#define RELAYS 8
+////////////////////////////////////////////////////////////////////////
 
-//first relay, next relays are on pin 3-9
+#if RELAYS<1 or RELAYS>8
+  #error "RELAYS must be in range 1..8"
+#endif
+
+//first relay, next relays are on pin 3 up to 9
 const byte relayPin = 2;
 
 byte relayValues = 0; //all relays off
@@ -30,7 +40,7 @@ void setup() {
     }
   #endif
   
-  for (int i=0;i<8;i++) {
+  for (int i=0;i<RELAYS;i++) {
     pinMode(relayPin+i, OUTPUT);
     digitalWrite(relayPin+i,(relayValues & (1<<i))?LOW:HIGH); 
   }
@@ -43,7 +53,6 @@ void setup() {
     Serial.println(Ethernet.localIP());
   #endif
 }
-
 
 void loop() {
   // listen for incoming clients
@@ -68,7 +77,7 @@ void loop() {
         // send a reply after empty line
 
         // one time only on GET line, % escaped characters not allowed, spaces not allowed
-        if ( (currentLine.length()==13) && currentLine.startsWith(F("GET /")) && currentLine.lastIndexOf(' ')==3 && currentLine.IndexOf('%',4)==-1 ) {SetRelays(currentLine.substring(5));}
+        if ( (currentLine.length()==(5+RELAYS)) && currentLine.startsWith(F("GET /")) && currentLine.lastIndexOf(' ')==3 && currentLine.indexOf('%',4)==-1 ) {SetRelays(currentLine.substring(5));}
         
         if (c == '\n' && currentLineIsBlank) {
           // send a standard http response header
@@ -79,7 +88,7 @@ void loop() {
           client.println(F("<!DOCTYPE HTML>"));
           client.println(F("<html><style>a {font-size:10ex;text-decoration:none;} a.on {color:green;} a.off {color:red;}</style>"));
 
-          for (int i=0;i<8;i++) {
+          for (int i=0;i<RELAYS;i++) {
             String relayChange = "XXXXXXXX";
             byte relayValue=relayValues & (1<<i);
             if (relayValue){
@@ -89,7 +98,7 @@ void loop() {
               #endif
               client.print(F("<a class=\"on\" href=\"/"));
               relayChange.setCharAt(i,'0');
-              client.print(relayChange);
+              client.print(relayChange.substring(0,RELAYS));
               client.println(F("\">&#9646</a>"));
             } else {
                #ifdef SERDEBUG
@@ -98,7 +107,7 @@ void loop() {
               #endif
               client.print(F("<a class=\"off\" href=\"/"));
               relayChange.setCharAt(i,'1');
-              client.print(relayChange);
+              client.print(relayChange.substring(0,RELAYS));
               client.println(F("\">&#9647</a>"));
             }
           }
@@ -130,7 +139,7 @@ void loop() {
 }
 
 void SetRelays (String relays) {
-  for (int i=0;i<8;i++) {
+  for (int i=0;i<RELAYS;i++) {
 //    if (relays[i]==' ') return; //space is end of valid data
     if (relays[i]=='1') {
       #ifdef SERDEBUG
@@ -138,7 +147,11 @@ void SetRelays (String relays) {
         Serial.print(i);
         Serial.println("->on");
       #endif
-      digitalWrite(i+relayPin, LOW);
+      #ifdef INVERTED
+        digitalWrite(i+relayPin, LOW);
+      #else
+        digitalWrite(i+relayPin, HIGH);
+      #endif
       relayValues=relayValues | (1<<i);
     }
     if (relays[i]=='0') {
@@ -147,7 +160,11 @@ void SetRelays (String relays) {
         Serial.print(i);
         Serial.println("->off");
       #endif
-      digitalWrite(i+relayPin, HIGH);
+      #ifdef INVERTED
+        digitalWrite(i+relayPin, HIGH);
+      #else
+        digitalWrite(i+relayPin, LOW);
+      #endif
       relayValues=relayValues & ~(1<<i);
     }
   }
